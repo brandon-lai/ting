@@ -1,5 +1,7 @@
 # Ting
 
+[Open Ting](https://ting-psi-two.vercel.app) · [GitHub repository](https://github.com/brandon-lai/ting)
+
 Ting is a mobile-first Chinese learning platform that turns the HSK syllabus into 30-minute, retrieval-led lessons from beginner to advanced proficiency.
 
 ## Product decisions
@@ -58,7 +60,7 @@ supabase projects api-keys --project-ref YOUR_PROJECT_REF
 
 Save the generated database password in a password manager, then `unset SUPABASE_DB_PASSWORD`.
 
-In the new project's Authentication settings, enable Google using a Google Cloud OAuth client ID and secret. Set the Google authorized redirect URI to `https://YOUR_PROJECT_REF.supabase.co/auth/v1/callback`. Set the Supabase site URL to the deployed Ting origin and permit `https://YOUR_TING_ORIGIN/auth/callback`. Google Cloud consent and credentials require the account owner; Ting never reuses another app's secrets.
+In the new project's Authentication settings, enable Google using a Google Cloud OAuth client ID and secret. Set the Google authorized redirect URI to `https://YOUR_PROJECT_REF.supabase.co/auth/v1/callback`. Set the Supabase site URL to `https://ting-psi-two.vercel.app` and permit `https://ting-psi-two.vercel.app/auth/callback`. Google Cloud consent and credentials require the account owner; Ting never reuses another app's secrets.
 
 ```sh
 vercel env add NEXT_PUBLIC_SUPABASE_URL production
@@ -85,7 +87,9 @@ GitHub is the source of every production build. Link with `vercel link --yes --p
 
 Axe reports no WCAG A/AA violations on the phone render of every route or the dark home screen. These automated checks supplement, rather than replace, assistive-technology testing.
 
-Typecheck, ESLint, all 13 content/engine/progress tests and all eight real-Chrome flow/layout tests pass. The isolated PostgreSQL integration exercise verified anonymous denial, two-account RLS isolation, JSON round-trip, and optimistic-version replay/conflict handling; hosted Google login remains unverified until credentials exist.
+Typecheck, ESLint, all 13 content/engine/progress tests and all nine real-Chrome flow/layout tests pass. The isolated PostgreSQL integration exercise verified anonymous denial, two-account RLS isolation, JSON round-trip, and optimistic-version replay/conflict handling; hosted Google login remains unverified until credentials exist.
+
+Production route and asset smoke checks returned 200, the missing route returned 404, and all cloud methods correctly refused with 503 while unconfigured. The final level-menu capture verifies 44px option targets. Sentence transcript fallbacks also change the instruction to reading and record a reading score, not a listening score.
 
 Every route was rendered at 1440px and 390px, with a 320px overflow assertion; additional 768px, 1024px and dark captures were inspected. Browser flows cover lesson completion and next-session navigation, microphone record/replay with synthetic audio, persisted mock deadlines, validated imports, confirmed deletion, and fully offline navigation. Keyboard probes found named, visible focus indicators at all 15 sampled stops on desktop and phone; overlays dismiss with Escape and restore focus. VoiceOver and physical-device microphone/tone quality were not verified.
 

@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test"
 import { readFileSync } from "node:fs"
-import { checkpointQuestions } from "../../lib/curriculum"
+import { checkpointQuestions, wordQuestion } from "../../lib/curriculum"
 import { freshProgress } from "../../lib/progress"
 import type { Word, Progress } from "../../lib/types"
 
@@ -201,6 +201,42 @@ test("mock deadline persists, unanswered questions score wrong and completion is
       () => JSON.parse(localStorage.getItem("ting:guest:v1")!).attempts.length
     )
   ).toBe(1)
+})
+
+test("sentence audio fallback changes the instruction and scores reading rather than listening", async ({
+  page,
+}) => {
+  const question = wordQuestion(words[0], words, 419, true)
+  const now = Date.now()
+  await page.goto("/exams")
+  await page.evaluate(
+    (p) => localStorage.setItem("ting:guest:v1", JSON.stringify(p)),
+    {
+      ...freshProgress(),
+      exam: {
+        level: 1,
+        seed: 419,
+        questions: [question],
+        answers: {},
+        position: 0,
+        started: now,
+        deadline: now + 60000,
+      },
+    }
+  )
+  await page.reload()
+  await page.getByRole("button", { name: "Use reading fallback" }).click()
+  await expect(
+    page.getByRole("heading", { name: "Read the sentence. What does it mean?" })
+  ).toBeVisible()
+  await page.locator(".option").nth(question.answer).click()
+  await page.getByRole("button", { name: "Finish mock", exact: true }).click()
+  await page.getByRole("button", { name: "Finish and see feedback" }).click()
+  const result = await page.evaluate(
+    () => JSON.parse(localStorage.getItem("ting:guest:v1")!) as Progress
+  )
+  expect(result.attempts[0].skills.reading).toEqual({ correct: 1, total: 1 })
+  expect(result.attempts[0].skills.listening).toEqual({ correct: 0, total: 0 })
 })
 
 test("progress imports are validated and deletion never occurs before confirmation", async ({

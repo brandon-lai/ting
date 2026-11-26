@@ -129,6 +129,12 @@ test("lesson, dialog, empty, error and advanced-content states remain visible", 
   await page.goto("/learn")
   await page.getByRole("combobox", { name: "Study level" }).click()
   await expect(page.getByRole("listbox")).toBeVisible()
+  const optionHeights = await page
+    .getByRole("option")
+    .evaluateAll((options) =>
+      options.map((option) => option.getBoundingClientRect().height)
+    )
+  expect(optionHeights.every((height) => height >= 44)).toBe(true)
   await capture(page, "level-menu-1440", false)
   await page.keyboard.press("Escape")
   await page.goto("/library")

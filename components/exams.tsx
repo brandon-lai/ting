@@ -359,6 +359,9 @@ export function Exams() {
                                   ...q,
                                   skill: "reading",
                                   text: q.audio,
+                                  prompt: q.wordId
+                                    ? "Read the sentence. What does it mean?"
+                                    : q.prompt,
                                   audio: undefined,
                                 }
                               : q
