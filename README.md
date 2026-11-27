@@ -32,6 +32,24 @@ Local lessons, spaced review, recording, history, progress import/export and dow
 
 Complete vocabulary coverage is not complete official exam preparation: the grammar and production activities are curated foundations, not a teacher-reviewed textbook or validated pronunciation assessment. Writing and advanced translation remain excluded by request. Supplement Ting with official samples and a qualified Mandarin teacher for high-stakes preparation.
 
+## Finding your place again
+
+**Today → lesson → checkpoint → spaced review → level mock.** A running mock comes first because its deadline keeps counting down. Otherwise Today shows the saved lesson, including its actual stage, words and sentence. With no draft it recommends the first unfinished session. After all sessions in a stage, take its mock; reaching Ting’s 80% practice target leads to the next course, or back to review after stage nine. These are suggestions, not locks or HSK certifications.
+
+Adding a library word makes it due without erasing past recall or recording a failure. An early successful replay is practice, not another spaced repetition. Leave Review open and newly due words appear without refreshing. If one stage is unavailable offline, cards from downloaded stages still work.
+
+If Ting cannot read a save, **do not clear browser storage**. Settings → **Export progress** downloads the original file unchanged, even if it is malformed. A normal lesson or preference change cannot overwrite it. To recover, confirm an import of a known-good backup, load a known-good account copy if available, or explicitly clear local progress. Export any unsynced work before loading cloud progress or signing out; an empty cloud account is never a replacement for local work.
+
+## Architecture
+
+| Area | Where it lives |
+| --- | --- |
+| Course and Today | `lib/curriculum.ts` plans stages, sessions and mocks; `components/home.tsx`, `course.tsx` and `lesson.tsx` present the study path. |
+| Study material | `public/curriculum/` contains licensed stage packs; `lib/data.ts` checks count, identity, level and word fields before use. `lib/content.ts` holds original exercises; `lib/videos.ts` holds supplementary links. |
+| Memory and assessment | `lib/progress.ts` validates schema 1, schedules recall and scores each timed mock once. Lesson, review and exam screens use those same rules. |
+| Device and account saves | `lib/device-progress.ts` owns the shipped `ting:guest:v1` and `ting:account:<id>:v1` keys. `components/learning-provider.tsx` scopes writes to the active profile. `lib/cloud-copy.ts`, `/api/progress` and the Supabase migration validate restores and versioned account saves. |
+| Mobile, media and offline | Existing shadcn/Base UI controls are themed in `app/globals.css`. `lib/offline.ts` and `public/sw.js` cache screens and stage packs; media practice keeps recording local and recognition and video opt-in. |
+
 ## Run
 
 ```sh
@@ -85,12 +103,14 @@ GitHub is the source of every production build. Link with `vercel link --yes --p
 
 ## Verification
 
-Axe reports no WCAG A/AA violations on the phone render of every route or the dark home screen. These automated checks supplement, rather than replace, assistive-technology testing.
+Run `npm test`, `npm run lint`, `npm run build` and `npm run test:e2e` (installed Google Chrome). The browser suite starts a production server on port 4317; `TING_SHOT_DIR` chooses where to put captures. For `npm run test:database`, set `DATABASE_TEST_URL` to a **new isolated PostgreSQL cluster** with a database named `ting_test`. The test creates roles and a mock auth schema; never use a hosted or shared database.
 
-Typecheck, ESLint, all 13 content/engine/progress tests and all nine real-Chrome flow/layout tests pass. The isolated PostgreSQL integration exercise verified anonymous denial, two-account RLS isolation, JSON round-trip, and optimistic-version replay/conflict handling; hosted Google login remains unverified until credentials exist.
+Version 0.0.2 covers 22 unit/content tests and 14 Chrome flow/layout tests. `tests/fixtures/shipped-v1.json` is local-only study data actually produced by release `b11c119` in a throwaway profile. Tests open it directly, preserve its cards/preferences/draft, export damaged bytes unchanged, recover by confirmed import, and exercise stage completion through the mock into the next course. The isolated database exercise covers two-account ownership, anonymous denial, JSON round-trips and stale versions. Local mock responses exercised empty cloud loads, save/reload versions, sign-out and late account responses; they are not a hosted Google login.
 
-Production route and asset smoke checks returned 200, the missing route returned 404, and all cloud methods correctly refused with 503 while unconfigured. The final level-menu capture verifies 44px option targets. Sentence transcript fallbacks also change the instruction to reading and record a reading score, not a listening score.
+On macOS 26.3, Chrome 158 rendered every public screen at 390 and 1440 CSS pixels, with 320px overflow checks, tablet and dark captures. WebKit 27.2 also rendered all 12 routes at iPhone size and resumed a saved word after reload. Axe found no A/AA violations on the phone tour or dark home; 20 real Tab stops on desktop and phone had names and visible rings. Browser automation used synthetic microphone input, not a physical microphone. These checks do not substitute for VoiceOver, real phone installation or listening to device voices.
 
-Every route was rendered at 1440px and 390px, with a 320px overflow assertion; additional 768px, 1024px and dark captures were inspected. Browser flows cover lesson completion and next-session navigation, microphone record/replay with synthetic audio, persisted mock deadlines, validated imports, confirmed deletion, and fully offline navigation. Keyboard probes found named, visible focus indicators at all 15 sampled stops on desktop and phone; overlays dismiss with Escape and restore focus. VoiceOver and physical-device microphone/tone quality were not verified.
+## Owner launch checklist
 
-The independent design review approved shipping in both rounds. Its refinements were implemented: distinguish session vocabulary, restore Mandarin prominence in retrieval and lesson entry, and paginate mock mistakes. Sloplint is clean and DESIGN.md has no validation errors. Browser-discovered fixes included primary link-button contrast (8.09:1 after removing the unlayered inherited color), a 320px practice-tab overflow, and next-session result state.
+- [ ] To enable accounts, provide a dedicated Supabase slot, apply the migration, and configure Google OAuth and Vercel production variables as described above. No other project needs to be paused by Ting. Set up a private owner contact for account deletion before inviting account users; GitHub issue reports are public.
+- [ ] After the GitHub deployment, sign in with two real accounts on two devices. Verify restore, conflict handling, sign-out and deletion before announcing cloud sync.
+- [ ] On a real iPhone and Android phone, install the PWA, download a level, reopen in airplane mode, check VoiceOver/TalkBack and try a Mandarin voice and microphone. Browser emulation does not validate physical audio or operating-system installation prompts.
