@@ -14,10 +14,40 @@ export const shellRoutes = [
   "/terms",
 ]
 
+let registration: Promise<ServiceWorkerRegistration> | undefined
+
+export function registerOffline() {
+  registration ??= navigator.serviceWorker
+    .register("/sw.js", { scope: "/", updateViaCache: "none" })
+    .catch((error: unknown) => {
+      registration = undefined
+      throw error
+    })
+  return registration
+}
+
 export async function cacheAppShell() {
   if (!("caches" in window) || !("serviceWorker" in navigator))
     throw new Error("Offline downloads are not supported in this browser.")
-  await navigator.serviceWorker.ready
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    await Promise.race([
+      registerOffline().then(() => navigator.serviceWorker.ready),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(
+              new Error(
+                "Offline mode did not start. Allow site storage, refresh online and retry the download."
+              )
+            ),
+          10000
+        )
+      }),
+    ])
+  } finally {
+    clearTimeout(timer)
+  }
   const cache = await caches.open(SHELL_CACHE)
   const assets = new Set<string>()
   for (const route of shellRoutes) {

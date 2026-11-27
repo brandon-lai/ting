@@ -32,8 +32,12 @@ import { hasGoogle } from "@/lib/cloud"
 import { levels, asLevel } from "@/lib/curriculum"
 import { freshProgress, progressSchema } from "@/lib/progress"
 import { cacheAppShell, WORD_CACHE } from "@/lib/offline"
+import { parseWordPack } from "@/lib/data"
+import type { Level } from "@/lib/types"
+import { version } from "@/package.json"
 
-type Confirmation = "reset" | "import" | "load" | "guest" | "delete" | null
+type Confirmation =
+  "reset" | "import" | "load" | "guest" | "delete" | "logout" | null
 
 export function Settings() {
   const {
@@ -48,7 +52,9 @@ export function Settings() {
     loadCloud,
     importGuest,
     deleteCloud,
-    storageError,
+    replace,
+    exportFile,
+    readOnly,
   } = useLearning()
   const { theme, setTheme } = useTheme()
   const params = useSearchParams()
@@ -88,16 +94,16 @@ export function Settings() {
   }, [])
 
   function exportProgress() {
-    let exported = JSON.stringify(progress, null, 2)
-    if (storageError) {
-      const key = user ? `ting:account:${user.id}:v1` : "ting:guest:v1"
-      try {
-        exported = localStorage.getItem(key) ?? exported
-      } catch {
-        setMessage(
-          "The stored file could not be read. The current in-memory progress can still be exported."
-        )
-      }
+    let exported: string
+    try {
+      exported = exportFile()
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "The stored file could not be read. No backup was created."
+      )
+      return
     }
     const url = URL.createObjectURL(
       new Blob([exported], { type: "application/json" })
@@ -113,8 +119,8 @@ export function Settings() {
     const selected = event.target.files?.[0]
     if (!selected) return
     try {
-      if (selected.size > 3000000)
-        throw new Error("Progress files must be smaller than 3 MB.")
+      if (selected.size > 16 * 1024 * 1024)
+        throw new Error("Local progress files must be 16 MB or smaller.")
       const parsed = progressSchema.safeParse(JSON.parse(await selected.text()))
       if (!parsed.success)
         throw new Error(
@@ -133,7 +139,7 @@ export function Settings() {
     event.target.value = ""
   }
 
-  async function download(level: number) {
+  async function download(level: Level) {
     setDownloadBusy(level)
     setMessage(null)
     try {
@@ -143,15 +149,13 @@ export function Settings() {
         throw new Error(
           "Offline downloads are available in the production build, not the development server."
         )
-      await cacheAppShell()
       const response = await fetch(`/curriculum/level-${level}.json`, {
         cache: "reload",
       })
       if (!response.ok)
         throw new Error("The level could not download. Reconnect and retry.")
-      const data = await response.clone().json()
-      if (!Array.isArray(data) || data.length !== levels[level - 1].count)
-        throw new Error("The download is incomplete. Nothing was saved.")
+      parseWordPack(level, await response.clone().json())
+      await cacheAppShell()
       const cache = await caches.open(WORD_CACHE)
       await cache.put(`/curriculum/level-${level}.json`, response)
       setDownloads((current) => [...new Set([...current, level])])
@@ -186,22 +190,31 @@ export function Settings() {
 
   async function confirm() {
     if (confirmation === "reset") {
-      if (!update(() => freshProgress())) return
+      if (!replace(freshProgress())) {
+        setConfirmation(null)
+        return
+      }
       setMessage(
         "Study progress cleared on this device. Cloud progress, if any, was not deleted."
       )
     } else if (confirmation === "import" && imported) {
-      if (!update(() => imported)) return
+      if (!replace(imported)) {
+        setConfirmation(null)
+        return
+      }
       setMessage(
         "Progress imported on this device. No cloud copy has been overwritten."
       )
     } else if (confirmation === "load") await loadCloud()
     else if (confirmation === "guest") importGuest()
     else if (confirmation === "delete") await deleteCloud()
+    else if (confirmation === "logout") await logout()
     setConfirmation(null)
   }
 
   const descriptions = {
+    logout:
+      "Signing out removes this account’s study progress from this browser. Save to cloud or export any unsynced work first. Guest progress is kept separately.",
     reset:
       "This removes the current local lessons, reviews and mock history. Export first if you want a backup. It does not remove a cloud copy.",
     import:
@@ -337,7 +350,9 @@ export function Settings() {
                 ? (user.email ?? "Signed-in learner")
                 : "Learning on this device"}
             </h3>
-            <p className="small muted">{cloudMessage}</p>
+            <p className="small muted" aria-live="polite">
+              {cloudMessage}
+            </p>
           </div>
         </div>
         {!user && (
@@ -345,7 +360,7 @@ export function Settings() {
             <p>
               {hasGoogle
                 ? "Sign in with Google to create an account copy. Guest progress stays separate until you choose to import it."
-                : "Google sign-in and cross-device sync are not configured. The dedicated Supabase project is blocked by the account’s free-project quota. No existing live app has been paused."}
+                : "Google sign-in and cloud saves aren’t available on this site yet. To move to another device, export your progress here and import the file there."}
             </p>
             {hasGoogle && (
               <Button onClick={login} disabled={cloudBusy}>
@@ -356,7 +371,7 @@ export function Settings() {
         )}
         {user && (
           <div className="row wrap">
-            <Button onClick={saveCloud} disabled={cloudBusy}>
+            <Button onClick={saveCloud} disabled={cloudBusy || readOnly}>
               Save to cloud
             </Button>
             <Button
@@ -373,7 +388,11 @@ export function Settings() {
             >
               Import guest progress
             </Button>
-            <Button variant="ghost" onClick={logout} disabled={cloudBusy}>
+            <Button
+              variant="ghost"
+              onClick={() => setConfirmation("logout")}
+              disabled={cloudBusy}
+            >
               Sign out
             </Button>
           </div>
@@ -488,6 +507,26 @@ export function Settings() {
           )}
         </div>
       </section>
+      <h2 className="settings-title">About Ting</h2>
+      <section className="settings-group">
+        <p>
+          Version {version}. Independent HSK practice, one conversation at a
+          time.
+        </p>
+        <a
+          className="text-link"
+          href="https://github.com/brandon-lai/ting/issues/new"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Report a problem on GitHub
+        </a>
+        <p className="small muted">
+          Reports are public. Include the stage, session and what went wrong.
+          Leave out progress files, recordings, sign-in details and personal
+          information.
+        </p>
+      </section>
       <Dialog
         open={confirmation !== null}
         onOpenChange={(open) => {
@@ -500,7 +539,9 @@ export function Settings() {
               ? "Replace local study progress?"
               : confirmation === "load"
                 ? "Load the cloud copy?"
-                : "Delete study progress?"}
+                : confirmation === "logout"
+                  ? "Sign out on this device?"
+                  : "Delete study progress?"}
           </DialogTitle>
           <DialogDescription>
             {confirmation ? descriptions[confirmation] : ""}
@@ -509,7 +550,9 @@ export function Settings() {
             <Button onClick={confirm} disabled={cloudBusy}>
               {confirmation === "reset" || confirmation === "delete"
                 ? "Confirm deletion"
-                : "Confirm replacement"}
+                : confirmation === "logout"
+                  ? "Confirm sign out"
+                  : "Confirm replacement"}
             </Button>
             <Button variant="outline" onClick={() => setConfirmation(null)}>
               Keep current progress

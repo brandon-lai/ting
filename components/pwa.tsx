@@ -1,5 +1,6 @@
 "use client"
 import { useEffect } from "react"
+import { registerOffline } from "@/lib/offline"
 
 export function PwaRegistration() {
   useEffect(() => {
@@ -8,15 +9,13 @@ export function PwaRegistration() {
       !("serviceWorker" in navigator)
     )
       return
-    navigator.serviceWorker
-      .register("/sw.js", { scope: "/", updateViaCache: "none" })
-      .catch((error: unknown) => {
-        console.error(
-          "Offline registration failed:",
-          error instanceof Error ? error.message : "Unknown error"
-        )
-        window.dispatchEvent(new CustomEvent("ting:offline-error"))
-      })
+    registerOffline().catch((error: unknown) => {
+      console.error(
+        "Offline registration failed:",
+        error instanceof Error ? error.message : "Unknown error"
+      )
+      window.dispatchEvent(new CustomEvent("ting:offline-error"))
+    })
     const navigateOffline = (event: MouseEvent) => {
       if (
         navigator.onLine ||
