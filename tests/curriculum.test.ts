@@ -9,8 +9,10 @@ import {
   examSpec,
   nextLesson,
   lessonKey,
+  dailyRecommendation,
 } from "../lib/curriculum"
-import { freshProgress } from "../lib/progress"
+import { freshProgress, scoreExam } from "../lib/progress"
+import { parseWordPack } from "../lib/data"
 import type { Word } from "../lib/types"
 
 const data = levels.map(
@@ -51,6 +53,61 @@ test("next recommendation follows actual completion, not a fabricated lock", () 
   for (let i = 0; i < lessonCount(1); i++)
     p.lessons[lessonKey(1, i)] = { completed: 3, score: 80 }
   assert.equal(nextLesson(p), null)
+})
+
+test("stage packs reject incomplete, repeated or misplaced words before lesson rendering", () => {
+  for (const { level, count } of levels)
+    assert.equal(parseWordPack(level, data[level - 1]).length, count)
+  const one = data[0]
+  for (const pack of [
+    [],
+    one.slice(1),
+    [one[1], ...one.slice(1)],
+    [data[1][0], ...one.slice(1)],
+    [{ ...one[0], id: "hsk3-01500" }, ...one.slice(1)],
+  ])
+    assert.throws(() => parseWordPack(1, pack), /incomplete or damaged/)
+})
+
+test("completed stages lead to a mock, the next stage or final maintenance; active mocks take priority", () => {
+  for (const level of [1, 9] as const) {
+    const p = freshProgress()
+    p.level = level
+    for (let i = 0; i < lessonCount(level); i++)
+      p.lessons[lessonKey(level, i)] = { completed: 4, score: 80 }
+    assert.deepEqual(dailyRecommendation(p), {
+      kind: "mock",
+      level,
+      resume: false,
+    })
+    const questions = buildExam(level, all, 7)
+    p.exam = {
+      level,
+      seed: 7,
+      questions,
+      started: 5,
+      deadline: 25,
+      position: 0,
+      answers: {},
+    }
+    assert.deepEqual(dailyRecommendation(p), {
+      kind: "mock",
+      level,
+      resume: true,
+    })
+    p.attempts = [scoreExam(p.exam, 10)]
+    p.exam.answers = Object.fromEntries(questions.map((q) => [q.id, q.answer]))
+    const pass = scoreExam(p.exam, 20)
+    p.exam = null
+    assert.equal(dailyRecommendation(p).kind, "mock")
+    p.attempts.unshift(pass)
+    assert.deepEqual(
+      dailyRecommendation(p),
+      level === 1
+        ? { kind: "next-stage", level: 2 }
+        : { kind: "review", level: 9 }
+    )
+  }
 })
 
 test("all nine mocks have deterministic, distinct choices and connected reading", () => {

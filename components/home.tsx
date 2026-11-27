@@ -23,7 +23,7 @@ import { useClock } from "./use-clock"
 import { LoadState, SpeakButton } from "./common"
 import {
   levels,
-  nextLesson,
+  dailyRecommendation,
   lessonTitle,
   lessonWords,
   lessonCount,
@@ -35,12 +35,10 @@ import type { Level } from "@/lib/types"
 
 export function Home() {
   const { progress, ready, update } = useLearning()
-  const now = useClock()
-  const { words, loading, error, retry } = useWords(progress.level)
+  const now = useClock(progress.cards)
   const [choose, setChoose] = useState(false)
   const [selection, setSelection] = useState<Level>(progress.level)
-  const index = nextLesson(progress) ?? 0
-  const current = lessonWords(words, index)
+  const recommendation = dailyRecommendation(progress)
   const level = levels[progress.level - 1]
   const count = completedCount(progress, progress.level)
   const due = ready ? dueIds(progress, now).length : 0
@@ -71,87 +69,14 @@ export function Home() {
           Choose your level
         </Button>
       </div>
-      <LoadState loading={loading} error={error} retry={retry} />
-      {!loading && !error && (
-        <div className="dashboard-grid">
-          <section className="daily-ticket" aria-labelledby="daily-title">
-            <div className="row between wrap">
-              <h2 id="daily-title">{lessonTitle(progress.level, index)}</h2>
-              <span className="pill yellow">30 minutes</span>
-            </div>
-            <p className="small muted space-above">
-              {progress.level <= 6
-                ? `HSK ${progress.level}`
-                : `Advanced stage ${progress.level}`}{" "}
-              / Session {index + 1} of {lessonCount(progress.level)}
-            </p>
-            <div className="ticket-content">
-              <div className="itinerary-list">
-                {itinerary.map((step, i) => (
-                  <div className="itinerary-row" key={step.name}>
-                    <span className="row gap-small">
-                      <span className="step-number">{i + 1}</span>
-                      {step.name}
-                    </span>
-                    <span className="numbers muted">{step.minutes} min</span>
-                  </div>
-                ))}
-              </div>
-              <div className="ticket-phrase">
-                <p className="zh" lang="zh-Hans">
-                  {current[0]?.hanzi}
-                </p>
-                <p className="pinyin">{current[0]?.pinyin}</p>
-                <p className="small muted">{current[0]?.en}</p>
-              </div>
-            </div>
-            <div className="ticket-footer">
-              <Button
-                size="lg"
-                render={
-                  <Link
-                    href={
-                      progress.session
-                        ? `/study?level=${progress.session.level}&lesson=${progress.session.lesson}`
-                        : `/study?level=${progress.level}&lesson=${index}`
-                    }
-                  />
-                }
-                onClick={() => update((p) => ({ ...p, onboarded: true }))}
-              >
-                {progress.session
-                  ? "Continue your lesson"
-                  : "Start your lesson"}
-                <ArrowRight size={18} aria-hidden="true" />
-              </Button>
-              <Link className="text-link small" href="/learn">
-                See your course
-              </Link>
-            </div>
-          </section>
-          <section className="study-note" aria-labelledby="phrase-title">
-            <div className="row between">
-              <h2 id="phrase-title">A sentence to take with you</h2>
-              <BookOpen size={20} aria-hidden="true" />
-            </div>
-            <p className="zh" lang="zh-Hans">
-              {current[0]?.exampleZh}
-            </p>
-            {progress.pinyin && (
-              <p className="small muted">{current[0]?.examplePinyin}</p>
-            )}
-            <p className="quote-translation">{current[0]?.exampleEn}</p>
-            {current[0] && (
-              <SpeakButton
-                text={current[0].exampleZh}
-                label="Hear the sentence"
-              />
-            )}
-            <p className="small muted">
-              Listen once. Then try saying it without looking.
-            </p>
-          </section>
-        </div>
+      {!ready ? (
+        <p className="loading-line" role="status">
+          Opening your study plan…
+        </p>
+      ) : recommendation.kind === "lesson" ? (
+        <DailyLesson {...recommendation} />
+      ) : (
+        <StageTicket next={recommendation} />
       )}
       <section className="retention-strip" aria-label="Review recommendation">
         <div className="row">
@@ -283,5 +208,135 @@ export function Home() {
         </DialogContent>
       </Dialog>
     </>
+  )
+}
+
+function DailyLesson({
+  level,
+  index,
+  resume,
+}: {
+  level: Level
+  index: number
+  resume: boolean
+}) {
+  const { progress } = useLearning()
+  const { words, loading, error, retry } = useWords(level)
+  if (loading || error)
+    return <LoadState loading={loading} error={error} retry={retry} />
+  const current = lessonWords(words, index)
+  return (
+    <div className="dashboard-grid">
+      <section className="daily-ticket" aria-labelledby="daily-title">
+        <div className="row between wrap">
+          <h2 id="daily-title">{lessonTitle(level, index)}</h2>
+          <span className="pill yellow">30 minutes</span>
+        </div>
+        <p className="small muted space-above">
+          {level <= 6 ? `HSK ${level}` : `Advanced stage ${level}`} / Session{" "}
+          {index + 1} of {lessonCount(level)}
+        </p>
+        <div className="ticket-content">
+          <div className="itinerary-list">
+            {itinerary.map((step, i) => (
+              <div className="itinerary-row" key={step.name}>
+                <span className="row gap-small">
+                  <span className="step-number">{i + 1}</span>
+                  {step.name}
+                </span>
+                <span className="numbers muted">{step.minutes} min</span>
+              </div>
+            ))}
+          </div>
+          <div className="ticket-phrase">
+            <p className="zh" lang="zh-Hans">
+              {current[0]?.hanzi}
+            </p>
+            {progress.pinyin && <p className="pinyin">{current[0]?.pinyin}</p>}
+            <p className="small muted">{current[0]?.en}</p>
+          </div>
+        </div>
+        <div className="ticket-footer">
+          <Button
+            size="lg"
+            render={<Link href={`/study?level=${level}&lesson=${index}`} />}
+          >
+            {resume ? "Continue your lesson" : "Start your lesson"}
+            <ArrowRight size={18} aria-hidden="true" />
+          </Button>
+          <Link className="text-link small" href={`/learn?level=${level}`}>
+            See your course
+          </Link>
+        </div>
+      </section>
+      <section className="study-note" aria-labelledby="phrase-title">
+        <div className="row between">
+          <h2 id="phrase-title">A sentence to take with you</h2>
+          <BookOpen size={20} aria-hidden="true" />
+        </div>
+        <p className="zh" lang="zh-Hans">
+          {current[0]?.exampleZh}
+        </p>
+        {progress.pinyin && (
+          <p className="small muted">{current[0]?.examplePinyin}</p>
+        )}
+        <p className="quote-translation">{current[0]?.exampleEn}</p>
+        {current[0] && (
+          <SpeakButton text={current[0].exampleZh} label="Hear the sentence" />
+        )}
+        <p className="small muted">
+          Listen once. Then try saying it without looking.
+        </p>
+      </section>
+    </div>
+  )
+}
+
+function StageTicket({
+  next,
+}: {
+  next: Exclude<ReturnType<typeof dailyRecommendation>, { kind: "lesson" }>
+}) {
+  const name =
+    next.level <= 6 ? `HSK ${next.level}` : `advanced stage ${next.level}`
+  const [title, detail, action, href] =
+    next.kind === "mock"
+      ? next.resume
+        ? [
+            "Your timed mock is in progress",
+            "Your answers are saved. The original deadline still applies.",
+            "Resume your mock",
+            `/exams?level=${next.level}`,
+          ]
+        : [
+            `Put ${name} to the test`,
+            "You’ve finished the sessions. Take the skill mock, then use its feedback to decide what to practice.",
+            "Open level mock",
+            `/exams?level=${next.level}`,
+          ]
+      : next.kind === "next-stage"
+        ? [
+            `Your next stop: ${name}`,
+            "You finished the sessions and reached Ting’s practice target. Keep reviewing while you explore the next stage.",
+            `Explore ${name}`,
+            `/learn?level=${next.level}`,
+          ]
+        : [
+            "Keep your advanced Chinese in use",
+            "You finished the final stage and reached Ting’s practice target. Return to spaced review and official samples for exam preparation.",
+            "Review your words",
+            "/review",
+          ]
+  return (
+    <section className="daily-ticket stack" aria-labelledby="daily-title">
+      <h2 id="daily-title">{title}</h2>
+      <p>{detail}</p>
+      <div>
+        <Button size="lg" render={<Link href={href} />}>
+          {action}
+          <ArrowRight size={18} aria-hidden="true" />
+        </Button>
+      </div>
+    </section>
   )
 }

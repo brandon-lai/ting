@@ -223,19 +223,28 @@ export function freshProgress(): Progress {
 }
 
 const DAY = 86400000
+export function queueForReview(
+  card: ReviewCard | undefined,
+  now: number
+): ReviewCard {
+  return card
+    ? { ...card, due: Math.min(card.due, now) }
+    : {
+        due: now,
+        interval: 0,
+        ease: 2.5,
+        repetitions: 0,
+        lapses: 0,
+        last: 0,
+      }
+}
+
 export function schedule(
   card: ReviewCard | undefined,
   rating: Rating,
   now: number
 ): ReviewCard {
-  const previous = card ?? {
-    due: now,
-    interval: 0,
-    ease: 2.5,
-    repetitions: 0,
-    lapses: 0,
-    last: 0,
-  }
+  const previous = card ?? queueForReview(undefined, now)
   if (rating === "again")
     return {
       ...previous,
@@ -246,6 +255,10 @@ export function schedule(
       lapses: previous.lapses + 1,
       last: now,
     }
+  // A lesson replay or a manually queued word is practice, not another spaced recall.
+  const scheduled = previous.last + previous.interval * DAY
+  if (previous.repetitions > 0 && now < scheduled)
+    return { ...previous, due: scheduled }
   const ease = Math.min(
     3,
     Math.max(
@@ -265,7 +278,7 @@ export function schedule(
           ? Math.max(1, previous.interval * 1.2)
           : rating === "easy"
             ? 8
-            : 3
+            : Math.max(3, previous.interval + 1)
         : Math.min(
             36500,
             Math.max(
@@ -344,6 +357,36 @@ export function scoreExam(exam: ExamDraft, now: number): ExamAttempt {
     total: exam.questions.length,
     skills,
     mistakes,
+  }
+}
+
+export function finishExam(
+  progress: Progress,
+  draft: Pick<ExamDraft, "seed" | "started">,
+  time: number
+): Progress {
+  const exam = progress.exam
+  if (!exam || exam.seed !== draft.seed || exam.started !== draft.started)
+    return progress
+  const attempt = scoreExam(exam, time)
+  const cards = { ...progress.cards }
+  const missed = new Set(
+    attempt.mistakes.flatMap(({ question }) =>
+      question.wordId ? [question.wordId] : []
+    )
+  )
+  for (const id of missed)
+    cards[id] = { ...schedule(cards[id], "again", time), due: time }
+  const day = activityDay(time)
+  return {
+    ...progress,
+    exam: null,
+    attempts: [attempt, ...progress.attempts].slice(0, 50),
+    cards,
+    activity: {
+      ...progress.activity,
+      [day]: (progress.activity[day] ?? 0) + 1,
+    },
   }
 }
 

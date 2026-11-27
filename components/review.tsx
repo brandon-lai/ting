@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react"
 import { RotateCcw, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useLearning } from "./learning-provider"
+import { useClock } from "./use-clock"
 import { dueIds, schedule, activityDay } from "@/lib/progress"
 import { loadWords } from "@/lib/data"
 import { levels } from "@/lib/curriculum"
@@ -19,9 +20,9 @@ export function Review() {
   const [words, setWords] = useState<Word[]>([])
   const [error, setError] = useState<string | null>(null)
   const [retry, setRetry] = useState(0)
-  const [reveal, setReveal] = useState(false)
+  const [revealed, setRevealed] = useState<string | null>(null)
   const [done, setDone] = useState(0)
-  const [now] = useState(() => Date.now())
+  const now = useClock(progress.cards)
   const due = useMemo(() => dueIds(progress, now), [progress, now])
   const levelKey = [...new Set(due.map(wordLevel))].sort().join(",")
   useEffect(() => {
@@ -30,24 +31,30 @@ export function Review() {
     const selected = levelKey
       ? levelKey.split(",").map((n) => Number(n) as Level)
       : []
-    Promise.all(selected.map(loadWords))
-      .then((parts) => {
-        if (active) {
-          setWords(parts.flat())
-          setError(null)
-        }
-      })
-      .catch((e: unknown) => {
-        if (active)
-          setError(
-            e instanceof Error ? e.message : "Review words could not load."
+    Promise.allSettled(selected.map(loadWords)).then((parts) => {
+      if (active) {
+        setWords(
+          parts.flatMap((part) =>
+            part.status === "fulfilled" ? part.value : []
           )
-      })
+        )
+        const failed = parts.flatMap((part, i) =>
+          part.status === "rejected" ? [selected[i]] : []
+        )
+        setError(
+          failed.length
+            ? `Words for stage ${failed.join(", ")} could not load. You can still review available words. Reconnect and retry the other stages.`
+            : null
+        )
+      }
+    })
     return () => {
       active = false
     }
   }, [levelKey, ready, retry])
-  const word = words.find((w) => w.id === due[0])
+  const byId = useMemo(() => new Map(words.map((w) => [w.id, w])), [words])
+  const id = due.find((id) => byId.has(id))
+  const word = id ? byId.get(id) : undefined
   function rate(rating: Rating, time: number) {
     if (!word) return
     if (
@@ -64,7 +71,7 @@ export function Review() {
       }))
     ) {
       setDone((n) => n + 1)
-      setReveal(false)
+      setRevealed(null)
     }
   }
   return (
@@ -86,7 +93,12 @@ export function Review() {
           retry={() => setRetry((n) => n + 1)}
         />
       )}
-      {!error && !due.length && (
+      {(!ready || !now) && (
+        <p className="loading-line" role="status">
+          Opening your word review…
+        </p>
+      )}
+      {ready && now > 0 && !error && !due.length && (
         <Empty
           title={
             done ? "You’ve finished this review" : "No words due right now"
@@ -107,7 +119,7 @@ export function Review() {
           Loading the words you need to remember…
         </p>
       )}
-      {!error && word && (
+      {word && (
         <div className="exercise-surface">
           <div className="row between">
             <span className="small muted">{done} reviewed this session</span>
@@ -121,10 +133,12 @@ export function Review() {
             <p className="muted">What does it mean? Say it out loud.</p>
             <SpeakButton text={word.hanzi} label="Hear the word" />
           </div>
-          {!reveal ? (
+          {revealed !== word.id ? (
             <div className="exercise-footer">
               <p className="small muted">Don’t worry about being wrong.</p>
-              <Button onClick={() => setReveal(true)}>Reveal meaning</Button>
+              <Button onClick={() => setRevealed(word.id)}>
+                Reveal meaning
+              </Button>
             </div>
           ) : (
             <>
@@ -159,9 +173,11 @@ export function Review() {
                         <span className="small">
                           {rating === "again"
                             ? "10 minutes"
-                            : next.interval < 1
-                              ? "12 hours"
-                              : `${next.interval} days`}
+                            : next.last !== now
+                              ? "Keep schedule"
+                              : next.interval < 1
+                                ? "12 hours"
+                                : `${next.interval} ${next.interval === 1 ? "day" : "days"}`}
                         </span>
                       </Button>
                     )

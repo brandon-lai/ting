@@ -1,7 +1,7 @@
 "use client"
 import Link from "next/link"
 import { useState } from "react"
-import { useSearchParams } from "next/navigation"
+import { useStudyLevel } from "./use-study-level"
 import {
   ArrowRight,
   Check,
@@ -23,7 +23,6 @@ import { useWords } from "./use-words"
 import { LoadState } from "./common"
 import {
   levels,
-  asLevel,
   lessonCount,
   lessonKey,
   lessonTitle,
@@ -66,10 +65,7 @@ export function LevelPicker({
 
 export function Course() {
   const { progress, update } = useLearning()
-  const params = useSearchParams()
-  const [chosen, setChosen] = useState(
-    asLevel(params.get("level") ?? progress.level)
-  )
+  const [chosen, setChosen] = useStudyLevel()
   const [page, setPage] = useState(0)
   const current = levels[chosen - 1]
   const { words, loading, error, retry } = useWords(chosen)
@@ -77,7 +73,7 @@ export function Course() {
   const completed = completedCount(progress, chosen)
   const pageCount = Math.ceil(count / 24)
   function choose(value: string) {
-    setChosen(asLevel(value))
+    setChosen(value)
     setPage(0)
   }
   return (

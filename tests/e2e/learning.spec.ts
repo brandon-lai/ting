@@ -138,6 +138,7 @@ test("word review only reports persisted recall and error states are honest", as
     () => JSON.parse(localStorage.getItem("ting:guest:v1")!) as Progress
   )
   expect(value.cards[words[0].id].repetitions).toBe(0)
+  expect(value.cards[words[0].id].lapses).toBe(1)
   expect(value.cards[words[0].id].due - value.cards[words[0].id].last).toBe(
     600000
   )

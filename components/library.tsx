@@ -13,8 +13,8 @@ import { useLearning } from "./learning-provider"
 import { useWords } from "./use-words"
 import { LevelPicker } from "./course"
 import { LoadState, SpeakButton } from "./common"
-import { asLevel } from "@/lib/curriculum"
-import { isMastered, schedule } from "@/lib/progress"
+import { useStudyLevel } from "./use-study-level"
+import { isMastered, queueForReview } from "@/lib/progress"
 import type { Word } from "@/lib/types"
 
 const normalize = (text: string) =>
@@ -22,7 +22,7 @@ const normalize = (text: string) =>
 
 export function Library() {
   const { progress, update } = useLearning()
-  const [level, setLevel] = useState(progress.level)
+  const [level, setLevel] = useStudyLevel()
   const [query, setQuery] = useState("")
   const [page, setPage] = useState(0)
   const [detail, setDetail] = useState<Word | null>(null)
@@ -45,7 +45,7 @@ export function Library() {
         <LevelPicker
           value={level}
           onChange={(v) => {
-            setLevel(asLevel(v))
+            setLevel(v)
             setPage(0)
             setQuery("")
           }}
@@ -157,14 +157,17 @@ export function Library() {
                 </span>
               </DialogTitle>
               <DialogDescription>
-                {detail.pinyin} / {detail.en}
+                {progress.pinyin && `${detail.pinyin} / `}
+                {detail.en}
               </DialogDescription>
               <SpeakButton text={detail.hanzi} label="Hear the word" />
               <div className="example-block">
                 <p className="zh" lang="zh-Hans">
                   {detail.exampleZh}
                 </p>
-                <p className="small muted">{detail.examplePinyin}</p>
+                {progress.pinyin && (
+                  <p className="small muted">{detail.examplePinyin}</p>
+                )}
                 <p>{detail.exampleEn}</p>
                 <SpeakButton text={detail.exampleZh} label="Hear the example" />
               </div>
@@ -176,10 +179,10 @@ export function Library() {
                       ...p,
                       cards: {
                         ...p.cards,
-                        [detail.id]: {
-                          ...schedule(p.cards[detail.id], "again", Date.now()),
-                          due: Date.now(),
-                        },
+                        [detail.id]: queueForReview(
+                          p.cards[detail.id],
+                          Date.now()
+                        ),
                       },
                     }))
                   )

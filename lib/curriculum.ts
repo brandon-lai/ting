@@ -86,9 +86,12 @@ export const itinerary = [
   { name: "Check", minutes: 2, detail: "Recall it before you go." },
 ]
 
-export function asLevel(value: string | number | null | undefined): Level {
+export function asLevel(
+  value: string | number | null | undefined,
+  fallback: Level = 1
+): Level {
   const number = Number(value)
-  return levels.find((l) => l.level === number)?.level ?? 1
+  return levels.find((l) => l.level === number)?.level ?? fallback
 }
 
 export function lessonCount(level: Level) {
@@ -104,6 +107,37 @@ export function nextLesson(progress: Progress, level = progress.level) {
     if (!progress.lessons[lessonKey(level, i)]) return i
   }
   return null
+}
+
+export function dailyRecommendation(progress: Progress) {
+  const { level, session, exam } = progress
+  if (exam) return { kind: "mock", level: exam.level, resume: true } as const
+  if (session)
+    return {
+      kind: "lesson",
+      level: session.level,
+      index: session.lesson,
+      resume: true,
+    } as const
+  const index = nextLesson(progress)
+  if (index !== null)
+    return { kind: "lesson", level, index, resume: false } as const
+  const lastLesson = Math.max(
+    ...Object.entries(progress.lessons)
+      .filter(([key]) => key.startsWith(`${level}-`))
+      .map(([, lesson]) => lesson.completed)
+  )
+  const attempt = progress.attempts.find((attempt) => attempt.level === level)
+  if (
+    !attempt ||
+    attempt.timestamp < lastLesson ||
+    attempt.percent < examSpec(level).target
+  )
+    return { kind: "mock", level, resume: false } as const
+  const next = levels[level]
+  return next
+    ? ({ kind: "next-stage", level: next.level } as const)
+    : ({ kind: "review", level } as const)
 }
 
 export function completedCount(progress: Progress, level: Level) {

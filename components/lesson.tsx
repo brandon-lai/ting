@@ -17,13 +17,14 @@ import {
   lessonGrammar,
   lessonSpeaking,
   lessonKey,
+  nextLesson,
   itinerary,
   checkpointQuestions,
   random,
   shuffle,
   wordQuestion,
 } from "@/lib/curriculum"
-import { dueIds, schedule, activityDay } from "@/lib/progress"
+import { dueIds, schedule, activityDay, queueForReview } from "@/lib/progress"
 import { videos } from "@/lib/videos"
 import type { Level, SessionDraft, Word, Rating } from "@/lib/types"
 
@@ -77,7 +78,8 @@ export function Lesson() {
         action="Open your course"
       />
     )
-  if (result?.level === level && result.index === index)
+  if (result?.level === level && result.index === index) {
+    const remaining = nextLesson(progress, level)
     return (
       <>
         <div className="page-intro">
@@ -113,22 +115,21 @@ export function Lesson() {
               render={
                 <Link
                   href={
-                    index + 1 < lessonCount(level)
-                      ? `/study?level=${level}&lesson=${index + 1}`
+                    remaining !== null
+                      ? `/study?level=${level}&lesson=${remaining}`
                       : `/exams?level=${level}`
                   }
                 />
               }
             >
-              {index + 1 < lessonCount(level)
-                ? "Open next session"
-                : "Open level mock"}
+              {remaining !== null ? "Open next session" : "Open level mock"}
               <ArrowRight size={18} aria-hidden="true" />
             </Button>
           </div>
         </section>
       </>
     )
+  }
   return (
     <>
       <div className="page-intro">
@@ -139,7 +140,7 @@ export function Lesson() {
             {index + 1} / A 30-minute study plan
           </p>
         </div>
-        <Link className="text-link" href="/learn">
+        <Link className="text-link" href={`/learn?level=${level}`}>
           Back to course
         </Link>
       </div>
@@ -296,14 +297,7 @@ function LessonActivity({
             now
           )
         else if (!cards[word.id])
-          cards[word.id] = {
-            due: now,
-            interval: 0,
-            ease: 2.5,
-            repetitions: 0,
-            lapses: 0,
-            last: 0,
-          }
+          cards[word.id] = queueForReview(undefined, now)
       })
       return {
         ...p,

@@ -1,16 +1,31 @@
 "use client"
 import { useEffect, useState } from "react"
+import type { Progress } from "@/lib/types"
 
-export function useClock() {
+export function useClock(cards: Progress["cards"]) {
   const [now, setNow] = useState(0)
   useEffect(() => {
-    const tick = () => setNow(Date.now())
-    const initial = setTimeout(tick, 0)
-    const interval = setInterval(tick, 1000)
-    return () => {
-      clearTimeout(initial)
-      clearInterval(interval)
+    let timer: ReturnType<typeof setTimeout>
+    const tick = () => {
+      clearTimeout(timer)
+      const time = Date.now()
+      setNow(time)
+      const tomorrow = new Date(time)
+      tomorrow.setHours(24, 0, 0, 0)
+      const next = Object.values(cards).reduce(
+        (next, card) => (card.due > time ? Math.min(card.due, next) : next),
+        tomorrow.getTime()
+      )
+      timer = setTimeout(tick, next - time)
     }
-  }, [])
+    timer = setTimeout(tick, 0)
+    document.addEventListener("visibilitychange", tick)
+    window.addEventListener("pageshow", tick)
+    return () => {
+      clearTimeout(timer)
+      document.removeEventListener("visibilitychange", tick)
+      window.removeEventListener("pageshow", tick)
+    }
+  }, [cards])
   return now
 }

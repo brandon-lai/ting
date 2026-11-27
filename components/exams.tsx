@@ -1,7 +1,7 @@
 "use client"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Clock3, ArrowRight, ArrowLeft, ClipboardCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -12,9 +12,9 @@ import {
 } from "@/components/ui/dialog"
 import { useLearning } from "./learning-provider"
 import { LevelPicker } from "./course"
+import { useStudyLevel } from "./use-study-level"
 import { QuestionView, Empty } from "./common"
 import {
-  asLevel,
   buildExam,
   examSpec,
   completedCount,
@@ -25,22 +25,14 @@ import {
   shuffle,
 } from "@/lib/curriculum"
 import { loadThrough } from "@/lib/data"
-import {
-  scoreExam,
-  repairPlan,
-  schedule,
-  activityDay,
-  isMastered,
-} from "@/lib/progress"
+import { finishExam, repairPlan, isMastered } from "@/lib/progress"
 import { grammar } from "@/lib/content"
 import type { ExamAttempt, Level, Question } from "@/lib/types"
 
 export function Exams() {
   const { progress, update, ready } = useLearning()
   const params = useSearchParams()
-  const [level, setLevel] = useState(
-    asLevel(params.get("level") ?? progress.level)
-  )
+  const [level, setLevel] = useStudyLevel()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<ExamAttempt | null>(null)
@@ -68,71 +60,30 @@ export function Exams() {
     )
   }).length
 
-  function finish() {
+  const finish = useCallback(() => {
     if (!exam) return
     const time = Date.now()
-    const attempt = scoreExam(exam, time)
-    if (
-      update((p) => {
-        const cards = { ...p.cards }
-        attempt.mistakes.forEach(({ question }) => {
-          if (question.wordId)
-            cards[question.wordId] = {
-              ...schedule(cards[question.wordId], "again", time),
-              due: time,
-            }
-        })
-        return {
-          ...p,
-          exam: null,
-          attempts: [attempt, ...p.attempts].slice(0, 50),
-          cards,
-          activity: {
-            ...p.activity,
-            [activityDay(time)]: (p.activity[activityDay(time)] ?? 0) + 1,
-          },
-        }
-      })
-    ) {
+    let attempt: ExamAttempt | undefined
+    const saved = update((p) => {
+      const next = finishExam(p, exam, time)
+      if (p !== next) attempt = next.attempts[0]
+      return next
+    })
+    if (saved && attempt) {
       setResult(attempt)
       setConfirm(false)
     }
-  }
+  }, [exam, update])
 
   useEffect(() => {
     if (!exam) return
     const interval = setInterval(() => {
       const time = Date.now()
       setNow(time)
-      if (time >= exam.deadline) {
-        const attempt = scoreExam(exam, time)
-        if (
-          update((p) => {
-            const cards = { ...p.cards }
-            attempt.mistakes.forEach(({ question }) => {
-              if (question.wordId)
-                cards[question.wordId] = {
-                  ...schedule(cards[question.wordId], "again", time),
-                  due: time,
-                }
-            })
-            return {
-              ...p,
-              exam: null,
-              attempts: [attempt, ...p.attempts].slice(0, 50),
-              cards,
-              activity: {
-                ...p.activity,
-                [activityDay(time)]: (p.activity[activityDay(time)] ?? 0) + 1,
-              },
-            }
-          })
-        )
-          setResult(attempt)
-      }
+      if (time >= exam.deadline) finish()
     }, 1000)
     return () => clearInterval(interval)
-  }, [exam, update])
+  }, [exam, finish])
 
   async function start() {
     setBusy(true)
@@ -468,10 +419,7 @@ export function Exams() {
           <h1>See what really stayed.</h1>
           <p>Test your Chinese, then put the gaps back into practice.</p>
         </div>
-        <LevelPicker
-          value={level}
-          onChange={(value) => setLevel(asLevel(value))}
-        />
+        <LevelPicker value={level} onChange={setLevel} />
       </div>
       {error && (
         <div className="status-banner" role="alert">
@@ -587,6 +535,12 @@ function ExamResults({
   attempt: ExamAttempt
   back: () => void
 }) {
+  const { progress } = useLearning()
+  const nextStage =
+    attempt.percent >= examSpec(attempt.level).target &&
+    completedCount(progress, attempt.level) === lessonCount(attempt.level)
+      ? levels[attempt.level]
+      : undefined
   const plan = repairPlan(attempt)
   const [page, setPage] = useState(0)
   const pages = Math.ceil(attempt.mistakes.length / 5)
@@ -636,6 +590,14 @@ function ExamResults({
             This is not a normalized HSK score. Writing, translation and
             validated speaking are not assessed.
           </p>
+          {nextStage && (
+            <Button render={<Link href={`/learn?level=${nextStage.level}`} />}>
+              Explore{" "}
+              {nextStage.level <= 6
+                ? `HSK ${nextStage.level}`
+                : `advanced stage ${nextStage.level}`}
+            </Button>
+          )}
           <Button variant="outline" onClick={back}>
             Back to mock exams
           </Button>
@@ -656,7 +618,10 @@ function ExamResults({
             </p>
           )}
           <Button render={<Link href="/review" />}>Review missed words</Button>
-          <Button variant="outline" render={<Link href="/practice" />}>
+          <Button
+            variant="outline"
+            render={<Link href={`/practice?level=${attempt.level}`} />}
+          >
             Practice connected Chinese
           </Button>
         </section>

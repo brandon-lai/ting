@@ -6,6 +6,7 @@ import { Volume2, CircleAlert, Check, X, ArrowRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useLearning } from "./learning-provider"
 import type { Question } from "@/lib/types"
+import { mandarinVoice } from "@/lib/speech"
 
 export function SpeakButton({
   text,
@@ -25,10 +26,7 @@ export function SpeakButton({
       )
       return
     }
-    const voices = speechSynthesis.getVoices()
-    const voice =
-      voices.find((v) => /zh[-_]CN/i.test(v.lang)) ??
-      voices.find((v) => /^zh/i.test(v.lang))
+    const voice = mandarinVoice(speechSynthesis.getVoices())
     if (!voice) {
       setError(
         "No Mandarin voice is installed. Add a Chinese voice in your device’s speech settings, or use the transcript and video."
@@ -38,7 +36,7 @@ export function SpeakButton({
     speechSynthesis.cancel()
     const utterance = new SpeechSynthesisUtterance(text)
     utterance.voice = voice
-    utterance.lang = "zh-CN"
+    utterance.lang = voice.lang
     utterance.rate = progress.speechRate
     utterance.onerror = (event) => {
       if (event.error !== "canceled" && event.error !== "interrupted")

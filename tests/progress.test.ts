@@ -10,8 +10,11 @@ import {
   repairPlan,
   streak,
   activityDay,
+  finishExam,
+  queueForReview,
 } from "../lib/progress"
 import type { ExamDraft, Question } from "../lib/types"
+import { mandarinVoice } from "../lib/speech"
 
 test("forgotten words relearn quickly, without keeping a mastery claim", () => {
   const now = 1700000000000
@@ -172,4 +175,48 @@ test("streak uses local calendar days and survives crossing daylight-saving boun
   assert.equal(streak(p, now), 2)
   p.activity[activityDay(now)] = 1
   assert.equal(streak(p, now), 3)
+})
+
+test("adding a word and practicing early never record a lapse or manufacture spaced mastery", () => {
+  const t = 1700000000000
+  const fresh = queueForReview(undefined, t)
+  assert.equal(fresh.lapses, 0)
+  const learned = schedule(fresh, "easy", t)
+  const queued = queueForReview(learned, t + 100)
+  assert.deepEqual(queued, { ...learned, due: t + 100 })
+  assert.deepEqual(schedule(queued, "good", t + 101), learned)
+  assert.ok(schedule(queued, "good", learned.due).interval > learned.interval)
+  assert.equal(schedule(queued, "again", t + 101).lapses, 1)
+})
+
+test("timer and manual submit grade the latest answers and apply missed words once per mock", () => {
+  const p = freshProgress()
+  const exam: ExamDraft = {
+    level: 1,
+    seed: 17,
+    started: 5,
+    deadline: 50,
+    position: 0,
+    answers: {},
+    questions: questions.map((q) => ({ ...q, wordId: "hsk3-00001" })),
+  }
+  p.exam = { ...exam, answers: { "test-0": 2 } }
+  assert.equal(finishExam(p, { seed: 18, started: 5 }, 40), p)
+  const next = finishExam(p, exam, 50)
+  assert.equal(next.attempts[0].correct, 1)
+  assert.equal(next.cards["hsk3-00001"].lapses, 1)
+  assert.equal(finishExam(next, exam, 51), next)
+})
+
+test("device speech does not substitute Cantonese or a network voice for local Mandarin", () => {
+  const other = [
+    { lang: "zh-HK", localService: true },
+    { lang: "zh-yue-CN", localService: true },
+    { lang: "zh-CN", localService: false },
+  ]
+  assert.equal(mandarinVoice(other), undefined)
+  const taiwan = { lang: "zh-Hant-TW", localService: true }
+  assert.equal(mandarinVoice([...other, taiwan]), taiwan)
+  const mainland = { lang: "zh_CN", localService: true }
+  assert.equal(mandarinVoice([taiwan, mainland]), mainland)
 })

@@ -10,6 +10,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog"
 import { SpeakButton } from "./common"
+import { useLearning } from "./learning-provider"
 import type { SpeakingTask, Video } from "@/lib/types"
 
 interface RecognitionResult {
@@ -83,6 +84,7 @@ export function VideoLesson({ video }: { video: Video }) {
 }
 
 export function SpeakingPractice({ task }: { task: SpeakingTask }) {
+  const { progress } = useLearning()
   const recorder = useRef<MediaRecorder | null>(null)
   const stream = useRef<MediaStream | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -276,7 +278,9 @@ export function SpeakingPractice({ task }: { task: SpeakingTask }) {
           <p className="zh" lang="zh-Hans">
             {task.supportZh}
           </p>
-          <p className="small muted">{task.supportPinyin}</p>
+          {progress.pinyin && (
+            <p className="small muted">{task.supportPinyin}</p>
+          )}
           <p>{task.supportEn}</p>
           <SpeakButton text={task.supportZh} label="Listen to the model" />
         </div>

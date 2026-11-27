@@ -6,14 +6,14 @@ import { useLearning } from "./learning-provider"
 import { LevelPicker } from "./course"
 import { SpeakingPractice, VideoLesson } from "./media-practice"
 import { SpeakButton, QuestionView } from "./common"
-import { asLevel } from "@/lib/curriculum"
+import { useStudyLevel } from "./use-study-level"
 import { grammar, readings, speaking } from "@/lib/content"
 import { videos } from "@/lib/videos"
 import type { ReadingPassage } from "@/lib/types"
 
 export function Practice() {
   const { progress } = useLearning()
-  const [level, setLevel] = useState(progress.level)
+  const [level, setLevel] = useStudyLevel()
   const [index, setIndex] = useState(0)
   const tasks = speaking.filter((task) => task.level === level)
   const passages = readings.filter((passage) => passage.level === level)
@@ -28,7 +28,7 @@ export function Practice() {
         <LevelPicker
           value={level}
           onChange={(value) => {
-            setLevel(asLevel(value))
+            setLevel(value)
             setIndex(0)
           }}
         />
